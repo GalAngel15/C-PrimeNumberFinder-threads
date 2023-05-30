@@ -12,7 +12,7 @@ This program is designed to find prime numbers within a specified range. It util
 
 The following options are supported:
 
-- `-l [lower_bound]`: Set the lower bound of the range to search for prime numbers. Defaults to 1 if not provided.
+- `-l [lower_bound]`: Set the lower bound of the range to search for prime numbers. Defaults to 2 if not provided.
 - `-u [upper_bound]`: Set the upper bound of the range to search for prime numbers. Defaults to 100 if not provided.
 - `-n [number prints]`: Set the maximum number of prime numbers to print. Defaults to 10 if not provided.
 - `-t [threads]`: Set the number of threads to use for computation. Defaults to 4 if not provided.
@@ -36,10 +36,10 @@ After compiling, you can run the program with appropriate command-line arguments
 **Example:**
 
 ```shell
-./prime_number_finder -l 1 -u 100 -n 5 -t 2
+./prime_number_finder -l 10 -u 100 -n 5 -t 2
 ```
 
-This will print the first 5 prime numbers between 1 and 100 using 2 threads.
+This will print the first 5 prime numbers between 10 and 100 using 2 threads.
 
 ## Notes
 
@@ -60,7 +60,7 @@ This will print the first 5 prime numbers between 1 and 100 using 2 threads.
 
 האפשרויות הבאות נתמכות:
 
-- `-l [גבול תחתון]`: מגדיר את הגבול התחתון של הטווח לחיפוש מספרים ראשוניים. ברירת המחדל היא 1 אם לא סופק.
+- `-l [גבול תחתון]`: מגדיר את הגבול התחתון של הטווח לחיפוש מספרים ראשוניים. ברירת המחדל היא 2 אם לא סופק.
 - `-u [גבול עליון]`: מגדיר את הגבול העליון של הטווח לחיפוש מספרים ראשוניים. ברירת המחדל היא 100 אם לא סופק.
 - `-n [כמות להדפסה]`: מגביל את כמות המספרים הראשוניים שיש להדפיס. ברירת המחדל היא 10 אם לא סופק.
 - `-t [תהליכים]`: מגדיר את מספר התהליכים לשימוש בחישוב. ברירת המחדל היא 4 אם לא סופק.
