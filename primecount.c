@@ -8,11 +8,14 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <semaphore.h>
+#include "lock.c"
 
 void parseargs(char *argv[], int argc, int *lval, int *uval, int *n, int *t);
 int isprime(int n);
 void *mythread(void *arg);
 pthread_mutex_t lock= PTHREAD_MUTEX_INITIALIZER;
+rwlock_t myLock;
 int count=0;
 int num=0;
 char *flagarr = NULL;
@@ -24,7 +27,7 @@ typedef struct {
 
 int main (int argc, char **argv)
 {
-	int lval = 1;
+	int lval = 2;
 	int uval = 100;
 	int nval=10;
 	int t=4;
@@ -58,6 +61,7 @@ int main (int argc, char **argv)
 	args.lval=lval;
 	args.uval=uval;
 	num=lval;
+	rwlock_init(&myLock);
 	pthread_t *allThread = malloc(sizeof(pthread_t)*t);
 	for (int i=0; i<t; i++)
 	{
@@ -67,9 +71,8 @@ int main (int argc, char **argv)
 	{
 		pthread_join(allThread[i],NULL);
 	}
-	
 	// Print results
-	printf("Found %d primes%c\n", count, count ? ':' : '.');
+	printf("\nFound %d primes%c\n", count, count ? ':' : '.');
 	for (num = lval; num <= uval && nval>0; num++)
 		if (flagarr[num - lval])
 		{
@@ -77,6 +80,8 @@ int main (int argc, char **argv)
 			count--;
 			printf("%d%c", num, count&&nval ? ',' : '\n');  
 		}
+	free(allThread);
+	free(flagarr);
 	return 0;
 }
 
@@ -84,21 +89,24 @@ void *mythread(void *arg)
 {
 	// Set flagarr
 	myarg_t *args=(myarg_t*)arg;
-	while(num<= args->uval)
+	while(num <= args->uval)
 	{
-		pthread_mutex_lock(&lock);
+		rwlock_acquire_writelock(&myLock);
+		int temp = num;
 		num++;
-		pthread_mutex_unlock(&lock);
-		if(num<=args->uval)
+		rwlock_release_writelock(&myLock);
+		if(temp>args->uval)
+			return NULL;
+		printf("%d ,",temp);
+		if (isprime(temp))
 		{
-			if (isprime(num))
-			{
-				flagarr[num - args->lval] = 1; 
-				count ++;
-			} else {
-				flagarr[num - args->lval] = 0; 
-			}
-		}	
+			flagarr[temp - args->lval] = 1; 
+			pthread_mutex_lock(&lock);
+			count++;
+			pthread_mutex_unlock(&lock);
+		} else {
+			flagarr[temp - args->lval] = 0; 
+		}
 	}
 	return NULL;
 }
@@ -137,53 +145,66 @@ void parseargs(char *argv[], int argc, int *lval, int *uval, int *n, int *t)
     }    
 }
 int isprime(int n){
-  static int *primes = NULL; 	// NOTE: static !
-  static int size = 0;		// NOTE: static !
-  static int maxprime;		// NOTE: static !
-  int root;
-  int i;
+	static int *primes = NULL; 	// NOTE: static !
+	static int size = 0;		// NOTE: static !
+	static int maxprime;		// NOTE: static !
+	int root;
+	int i;
 
-  // Init primes array (executed on first call)
-  pthread_mutex_lock(&lock);
-  if (primes == NULL)
-  {
-    primes = (int *)malloc(2*sizeof(int));
-    if (primes == NULL)
-      exit(1);
-    size = 2;
-    primes[0] = 2;
-    primes[1] = 3;
-    maxprime = 3;
-  }
-  pthread_mutex_unlock(&lock);
-  root = (int)(sqrt(n));
+	// Init primes array (executed on first call)
+	 if (primes == NULL) {
+		rwlock_acquire_writelock(&myLock); // Acquire write lock for initialization
+		if (primes == NULL) { // Double check after acquiring lock
+		    primes = (int *)malloc(2 * sizeof(int));
+		    if (primes == NULL) {
+		        rwlock_release_writelock(&myLock); // Release the lock on failure
+		        exit(1);
+		    }
+		    size = 2;
+		    primes[0] = 2;
+		    primes[1] = 3;
+		    maxprime = 3;
+		}
+		rwlock_release_writelock(&myLock); // Release write lock after initialization
+	    }
+	root = (int)(sqrt(n));
 
-  // Update primes array, if needed
-  while (root > maxprime)
-    for (i = maxprime + 2 ;  ; i+=2)
-      if (isprime(i))
-      {
-        pthread_mutex_lock(&lock);
-        size++;
-        primes = (int *)realloc(primes, size * sizeof(int));
-        pthread_mutex_unlock(&lock);
-        if (primes == NULL)
-          exit(1);
-        primes[size-1] = i;
-        maxprime = i;
-        break;
-      }
+	// Update primes array, if needed
+	if(root > maxprime)
+	{
+		while (root > maxprime)
+		{
+			for (i = maxprime + 2 ;  ; i+=2)
+				if (isprime(i))
+				{
+					rwlock_acquire_writelock(&myLock);
+					size++;
+					primes = (int *)realloc(primes, size * sizeof(int));
+					if (primes == NULL){
+						rwlock_release_writelock(&myLock);
+						exit(1);
+					}
+					primes[size-1] = i;
+					maxprime = i;
+					rwlock_release_writelock(&myLock);
+					break;
+				}
+		}
+	}	
+	// Check 'special' cases
+	if (n <= 0)
+		return -1;
+	if (n == 1)
+		return 0;
 
-  // Check 'special' cases
-  if (n <= 0)
-    return -1;
-  if (n == 1)
-    return 0;
-
-  // Check prime
-  for (i = 0 ; ((i < size) && (root >= primes[i])) ; i++)
-    if ((n % primes[i]) == 0)
-      return 0;
-  return 1;
-  }
+	// Check prime
+	rwlock_acquire_readlock(&myLock); // Acquire read lock for accessing primes array
+    	for (i = 0; i < size && root >= primes[i]; i++)
+        	if (n % primes[i] == 0) {
+			rwlock_release_readlock(&myLock); // Release read lock before returning
+            		return 0;
+       		}
+    	rwlock_release_readlock(&myLock);
+	return 1;
+}
 
